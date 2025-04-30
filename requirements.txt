@@ -9,4 +9,5 @@ openai
 groq
 chromadb
 sentence-transformers
-huggingface-hub 
+huggingface-hub
+protobuf<=3.20.3 
