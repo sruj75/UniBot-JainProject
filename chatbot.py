@@ -43,7 +43,15 @@ def get_vectorstore():
     Returns:
         Chroma: The vector store
     """
-    # Check if vector store exists
+    # If we're using the in-memory database, it should have been created already
+    # It will be held in memory during the session but lost when the app restarts
+    if config.USING_IN_MEMORY_DB:
+        print("WARNING: Using in-memory vector database - this is a non-persistent fallback solution")
+        from pdf_processor import create_vector_db
+        # This will create a new in-memory database using the sample data
+        return create_vector_db()
+        
+    # Otherwise, check if vector store exists on disk
     db_path = os.path.abspath(config.VECTOR_DB_PATH)
     print(f"Looking for vector database at: {db_path}")
     
@@ -67,16 +75,46 @@ def get_vectorstore():
         print("Falling back to Hugging Face embeddings")
         embeddings = HuggingFaceEmbeddings(model_name=config.FALLBACK_MODEL)
     
-    # Load the vector store
+    # Try to load a FAISS database first if path exists
+    faiss_path = os.path.join(db_path, "faiss_index")
+    if os.path.exists(faiss_path):
+        try:
+            print(f"Attempting to load FAISS index from {faiss_path}")
+            from langchain_community.vectorstores import FAISS
+            vectorstore = FAISS.load_local(faiss_path, embeddings)
+            print("FAISS vector store successfully loaded")
+            return vectorstore
+        except Exception as e:
+            print(f"ERROR loading FAISS vector store: {str(e)}")
+            print("Will try ChromaDB next...")
+    
+    # Try loading the Chroma database
     try:
         print(f"Attempting to load Chroma DB from {db_path}")
-        vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
-        print("Vector store successfully loaded")
-        return vectorstore
+        # Import at runtime to avoid errors if ChromaDB not compatible
+        try:
+            from langchain_community.vectorstores import Chroma
+            vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
+            print("Chroma vector store successfully loaded")
+            return vectorstore
+        except Exception as e:
+            print(f"ERROR loading Chroma: {str(e)}")
+            # If we get here and the error is about SQLite version, create an in-memory DB
+            if "sqlite3" in str(e).lower():
+                print("SQLite version incompatible with ChromaDB, using in-memory fallback")
+                config.USING_IN_MEMORY_DB = True
+                from pdf_processor import create_vector_db
+                return create_vector_db()
+            raise
     except Exception as e:
         print(f"ERROR loading vector store: {str(e)}")
         traceback.print_exc()
-        raise
+        
+        # Last resort: try to create an in-memory database
+        print("FALLBACK: Creating in-memory vector database after loading error")
+        config.USING_IN_MEMORY_DB = True
+        from pdf_processor import create_vector_db
+        return create_vector_db()
 
 def format_college_response(query, answer):
     """

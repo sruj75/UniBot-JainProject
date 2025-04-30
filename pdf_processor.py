@@ -1,10 +1,33 @@
 import os
 import traceback
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
+import config
+
+# Try to import vector store libraries
+try:
+    from langchain_community.vectorstores import Chroma
+    CHROMA_AVAILABLE = True
+except ImportError:
+    CHROMA_AVAILABLE = False
+    print("Warning: ChromaDB not available")
+
+# Try to import FAISS as an alternative to Chroma
+try:
+    from langchain_community.vectorstores import FAISS
+    FAISS_AVAILABLE = True
+except ImportError:
+    FAISS_AVAILABLE = False
+    print("Warning: FAISS not available")
+
+# Try SQLite version check
+import sqlite3
+SQLITE_VERSION = sqlite3.sqlite_version_info
+SQLITE_COMPATIBLE = SQLITE_VERSION >= (3, 35, 0)
+if not SQLITE_COMPATIBLE:
+    print(f"SQLite version {sqlite3.sqlite_version} is below 3.35.0, which is required for ChromaDB")
+
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
-import config
 
 # Try to import PDF libraries, but don't fail if not available
 try:
@@ -20,6 +43,9 @@ try:
 except ImportError:
     PYMUPDF_AVAILABLE = False
     print("Warning: PyMuPDF not available, PDF processing will be limited")
+
+# This will be our fallback when ChromaDB/FAISS are not available
+from langchain_community.vectorstores import DocArrayInMemorySearch
 
 def process_pdf(pdf_path):
     """
@@ -182,27 +208,60 @@ def create_vector_db(text=None):
         traceback.print_exc()
         raise
     
-    # Create vector database directory if it doesn't exist
-    db_path = os.path.abspath(config.VECTOR_DB_PATH)
-    print(f"Vector DB path: {db_path}")
-    os.makedirs(db_path, exist_ok=True)
+    # Decision tree for vector store selection
+    # 1. Try ChromaDB if SQLite version is compatible
+    # 2. Try FAISS if available
+    # 3. Fall back to in-memory DocArray
+    vectordb = None
     
-    # Create and persist vector database
-    print("Creating Chroma vector database...")
+    # If in Streamlit Cloud, mark this in the configuration
+    is_streamlit_cloud = config.IS_STREAMLIT_CLOUD
+    print(f"Running in Streamlit Cloud: {is_streamlit_cloud}")
+    
     try:
-        vectordb = Chroma.from_texts(
-            texts=chunks,
-            embedding=embeddings,
-            persist_directory=db_path
-        )
-        
-        # Persist the database
-        print("Persisting vector database...")
-        vectordb.persist()
-        print(f"Vector database created and persisted at {db_path}")
-        
+        # First try Chroma if SQLite is compatible
+        if CHROMA_AVAILABLE and SQLITE_COMPATIBLE:
+            print("Trying ChromaDB vector database...")
+            # Create vector database directory if it doesn't exist
+            db_path = os.path.abspath(config.VECTOR_DB_PATH)
+            print(f"Vector DB path: {db_path}")
+            os.makedirs(db_path, exist_ok=True)
+            
+            vectordb = Chroma.from_texts(
+                texts=chunks,
+                embedding=embeddings,
+                persist_directory=db_path
+            )
+            
+            # Persist the database
+            print("Persisting vector database...")
+            vectordb.persist()
+            print(f"ChromaDB vector database created and persisted at {db_path}")
+        # Next try FAISS
+        elif FAISS_AVAILABLE:
+            print("Using FAISS vector database (ChromaDB not available or SQLite incompatible)")
+            vectordb = FAISS.from_texts(chunks, embeddings)
+            
+            # Save FAISS index to disk
+            faiss_path = os.path.join(config.VECTOR_DB_PATH, "faiss_index")
+            os.makedirs(os.path.dirname(faiss_path), exist_ok=True)
+            vectordb.save_local(faiss_path)
+            print(f"FAISS vector database created and saved at {faiss_path}")
+        # Last resort: in-memory DocArray
+        else:
+            print("Using in-memory DocArrayInMemorySearch (ChromaDB and FAISS not available)")
+            vectordb = DocArrayInMemorySearch.from_texts(chunks, embeddings)
+            print("In-memory vector database created (will not persist)")
+            
+            # Set a global flag to indicate we're using an in-memory store
+            config.USING_IN_MEMORY_DB = True
+            
         return vectordb
     except Exception as e:
         print(f"ERROR creating vector database: {str(e)}")
         traceback.print_exc()
-        raise
+        
+        # Last-resort fallback: create a minimal in-memory database regardless of error
+        print("FALLBACK: Creating minimal in-memory vector database after error")
+        config.USING_IN_MEMORY_DB = True
+        return DocArrayInMemorySearch.from_texts(chunks, embeddings)

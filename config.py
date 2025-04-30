@@ -30,6 +30,9 @@ else:
 # The key is used to ensure the vector database is created once per session
 VECTOR_DB_KEY = "vector_db_created"
 
+# Flag to track when we're using the in-memory fallback solution
+USING_IN_MEMORY_DB = False
+
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
 
