@@ -1,11 +1,25 @@
 import os
 import traceback
-from pypdf import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
 import config
+
+# Try to import PDF libraries, but don't fail if not available
+try:
+    from pypdf import PdfReader
+    PYPDF_AVAILABLE = True
+except ImportError:
+    PYPDF_AVAILABLE = False
+    print("Warning: pypdf not available, PDF processing will be limited")
+
+try:
+    import fitz  # PyMuPDF
+    PYMUPDF_AVAILABLE = True
+except ImportError:
+    PYMUPDF_AVAILABLE = False
+    print("Warning: PyMuPDF not available, PDF processing will be limited")
 
 def process_pdf(pdf_path):
     """
@@ -23,21 +37,24 @@ def process_pdf(pdf_path):
     
     try:
         # Primary method: Extract text from PDF using PyPDF
-        text = extract_with_pypdf(pdf_path)
-        
-        # If text extraction failed or got minimal text, try alternate method
-        if not text or len(text.strip()) < 100:
-            try:
-                # Try to import and use PyMuPDF (fitz) as a fallback
-                import fitz
-                text = extract_with_pymupdf(pdf_path)
-                print("Used PyMuPDF for text extraction")
-            except ImportError:
-                print("PyMuPDF not available, using PyPDF results")
+        if PYPDF_AVAILABLE:
+            text = extract_with_pypdf(pdf_path)
+            
+            # If text extraction failed or got minimal text, try alternate method
+            if not text or len(text.strip()) < 100:
+                if PYMUPDF_AVAILABLE:
+                    text = extract_with_pymupdf(pdf_path)
+                    print("Used PyMuPDF for text extraction")
+        elif PYMUPDF_AVAILABLE:
+            text = extract_with_pymupdf(pdf_path)
+            print("Used PyMuPDF for text extraction")
+        else:
+            print("No PDF extraction libraries available")
+            text = ""
     except Exception as e:
         print(f"Error extracting text from PDF: {str(e)}")
         traceback.print_exc()
-        raise
+        text = ""
     
     return text
 
@@ -51,6 +68,9 @@ def extract_with_pypdf(pdf_path):
     Returns:
         str: Extracted text from the PDF
     """
+    if not PYPDF_AVAILABLE:
+        return ""
+        
     try:
         pdf = PdfReader(pdf_path)
         text = ""
@@ -59,7 +79,7 @@ def extract_with_pypdf(pdf_path):
         return text
     except Exception as e:
         print(f"Error extracting with PyPDF: {str(e)}")
-        raise
+        return ""
 
 def extract_with_pymupdf(pdf_path):
     """
@@ -71,8 +91,10 @@ def extract_with_pymupdf(pdf_path):
     Returns:
         str: Extracted text from the PDF
     """
+    if not PYMUPDF_AVAILABLE:
+        return ""
+        
     try:
-        import fitz
         doc = fitz.open(pdf_path)
         text = ""
         for page in doc:
@@ -80,7 +102,7 @@ def extract_with_pymupdf(pdf_path):
         return text
     except Exception as e:
         print(f"Error extracting with PyMuPDF: {str(e)}")
-        raise
+        return ""
 
 def create_vector_db(text=None):
     """
