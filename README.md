@@ -41,7 +41,7 @@ pip install -r requirements.txt
 4. Place your PDF files in the `docs` directory. The default configuration looks for:
    - `BTech_MTech_2022.pdf` (primary)
    - `student-handbook-2018-2019-jain-university.pdf` (fallback)
-   - `Jain Shaata.pdf` (fallback)
+   - `Jain fee.pdf` (fallback)
 
 ## Usage
 

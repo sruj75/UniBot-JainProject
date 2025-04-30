@@ -2,6 +2,7 @@ import os
 import traceback
 import groq
 import openai
+import streamlit as st
 from langchain.chains import ConversationalRetrievalChain
 from langchain_openai import ChatOpenAI
 from langchain_community.llms import HuggingFaceHub
@@ -10,11 +11,26 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
 import config
 
+# Get API keys - first try environment variables, then Streamlit secrets
+def get_api_key(key_name, default=None):
+    # First try environment variables
+    value = os.environ.get(key_name)
+    if value:
+        return value
+    
+    # Then try Streamlit secrets
+    try:
+        return st.secrets.get(key_name, default)
+    except:
+        return default
+
 # Initialize Groq client
 groq_client = None
-if config.USE_GROQ and config.GROQ_API_KEY:
+GROQ_API_KEY = get_api_key("GROQ_API_KEY", config.GROQ_API_KEY)
+
+if config.USE_GROQ and GROQ_API_KEY:
     try:
-        groq_client = groq.Client(api_key=config.GROQ_API_KEY)
+        groq_client = groq.Client(api_key=GROQ_API_KEY)
         print("Successfully initialized Groq client")
     except Exception as e:
         print(f"Error initializing Groq client: {str(e)}")
@@ -28,14 +44,20 @@ def get_vectorstore():
         Chroma: The vector store
     """
     # Check if vector store exists
-    if not os.path.exists(config.VECTOR_DB_PATH):
+    db_path = os.path.abspath(config.VECTOR_DB_PATH)
+    print(f"Looking for vector database at: {db_path}")
+    
+    if not os.path.exists(db_path):
+        print(f"ERROR: Vector database directory not found at {db_path}")
         raise FileNotFoundError("Vector database not found. Please process a PDF first.")
     
     # Load the embeddings
     try:
         # For vectorstore, we'll use OpenAI embeddings if available, otherwise fall back to HuggingFace
-        if os.getenv("OPENAI_API_KEY"):
+        OPENAI_API_KEY = get_api_key("OPENAI_API_KEY")
+        if OPENAI_API_KEY:
             print("Loading vector store with OpenAI embeddings")
+            os.environ["OPENAI_API_KEY"] = OPENAI_API_KEY  # Set for OpenAI libraries
             embeddings = OpenAIEmbeddings()
         else:
             print("Loading vector store with Hugging Face embeddings")
@@ -47,10 +69,12 @@ def get_vectorstore():
     
     # Load the vector store
     try:
-        vectorstore = Chroma(persist_directory=config.VECTOR_DB_PATH, embedding_function=embeddings)
+        print(f"Attempting to load Chroma DB from {db_path}")
+        vectorstore = Chroma(persist_directory=db_path, embedding_function=embeddings)
+        print("Vector store successfully loaded")
         return vectorstore
     except Exception as e:
-        print(f"Error loading vector store: {str(e)}")
+        print(f"ERROR loading vector store: {str(e)}")
         traceback.print_exc()
         raise
 
