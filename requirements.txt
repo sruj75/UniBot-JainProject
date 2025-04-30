@@ -1,10 +1,12 @@
 PyPDF2
+pymupdf
 langchain
 langchain-community
 langchain-openai
 streamlit
 python-dotenv
 openai
+groq
 chromadb
 sentence-transformers
-pypdf 
+huggingface-hub 

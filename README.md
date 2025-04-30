@@ -1,13 +1,14 @@
-# College Information Chatbot
+# UniBot - College Information Chatbot
 
-This is a simple chatbot application that can answer questions about your college based on a PDF document. It uses natural language processing and machine learning to understand questions and provide relevant answers.
+A simple chatbot application that can answer questions about your college based on PDF documents. This application automatically processes PDF files from the `docs` directory and creates a chat interface for asking questions about B.Tech and M.Tech programs.
 
 ## Features
 
-- Upload and process PDF documents containing college information
+- Automatically loads and processes PDF documents from the `docs` directory
 - Chat-based interface for asking questions
 - Context-aware responses based on the PDF content
-- Support for both OpenAI and local models
+- Multiple PDF extraction methods for better compatibility
+- Support for both Groq and OpenAI APIs, with fallback to local models
 
 ## Requirements
 
@@ -19,7 +20,7 @@ This is a simple chatbot application that can answer questions about your colleg
 1. Clone this repository:
 ```
 git clone <repository-url>
-cd college-chatbot
+cd unibot
 ```
 
 2. Install dependencies:
@@ -27,14 +28,20 @@ cd college-chatbot
 pip install -r requirements.txt
 ```
 
-3. (Optional) Set up environment variables:
+3. (Optional) Set up API keys:
    
-   Create a `.env` file in the project root and add your OpenAI API key:
+   Create a `.env` file in the project root and add your API keys:
    ```
-   OPENAI_API_KEY=your_api_key_here
+   OPENAI_API_KEY=your_openai_api_key_here
+   HUGGINGFACEHUB_API_TOKEN=your_huggingface_token_here
    ```
    
-   If you don't have an OpenAI API key, the application will fall back to using local models.
+   The application uses Groq API by default (configured in `config.py`), but can fall back to local models if needed.
+
+4. Place your PDF files in the `docs` directory. The default configuration looks for:
+   - `BTech_MTech_2022.pdf` (primary)
+   - `student-handbook-2018-2019-jain-university.pdf` (fallback)
+   - `Jain Shaata.pdf` (fallback)
 
 ## Usage
 
@@ -45,15 +52,13 @@ streamlit run app.py
 
 2. Open your web browser and go to the URL displayed in the terminal (usually http://localhost:8501)
 
-3. Upload your college PDF document using the file uploader in the sidebar
+3. The application will automatically process PDF files from the `docs` directory
 
-4. Click the "Process PDF" button to extract information from the PDF
-
-5. Ask questions in the chat interface! The chatbot will respond based on the content of your PDF
+4. Ask questions in the chat interface!
 
 ## How it Works
 
-1. **PDF Processing**: The application extracts text from the uploaded PDF document.
+1. **PDF Processing**: The application automatically extracts text from PDF files in the `docs` directory.
 
 2. **Text Chunking**: The extracted text is split into smaller chunks for processing.
 
@@ -61,17 +66,18 @@ streamlit run app.py
 
 4. **Question Answering**: When you ask a question, the application finds the most relevant chunks of text and uses them to generate a response.
 
+## Files in this Project
+
+- `app.py`: Main application file with Streamlit UI
+- `pdf_processor.py`: Handles PDF text extraction and vector database creation
+- `chatbot.py`: Processes queries and generates responses
+- `config.py`: Contains configuration settings
+- `requirements.txt`: List of required Python packages
+- `docs/`: Directory containing PDF files to be processed
+
 ## Customization
 
-You can customize the behavior of the chatbot by modifying the following parameters:
-
-- In `pdf_processor.py`:
-  - `chunk_size`: The size of text chunks (default: 1000)
-  - `chunk_overlap`: The overlap between chunks (default: 200)
-
-- In `chatbot.py`:
-  - `search_kwargs={"k": 3}`: The number of chunks to retrieve (default: 3)
-  - `temperature`: Controls the randomness of responses (default: 0)
+You can customize the behavior of the chatbot by modifying the settings in `config.py`.
 
 ## Troubleshooting
 
